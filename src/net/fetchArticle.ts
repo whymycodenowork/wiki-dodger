@@ -1,9 +1,9 @@
-import { Vec2, Color, CharUtils} from '../utils.js';
+import { Vec2, Color, CharUtils, type Entity} from '../utils.js';
 import ImageEntity from '../entities/ImageEntity.js';
 import RectEntity from '../entities/RectEntity.js';
 
 // ============================================================================
-// Style Definitions (Wikipedia-like)
+// Style Definitions
 // ============================================================================
 
 interface ComputedStyle {
@@ -22,6 +22,8 @@ interface ComputedStyle {
     borderColor: Color | null;
     lineHeight: number;
     fontWeight: 'normal' | 'bold';
+    fontStyle: 'normal' | 'italic';
+    textDecoration: 'none' | 'underline';
     textAlign: 'left' | 'center' | 'right';
 }
 
@@ -131,6 +133,15 @@ const DEFAULT_STYLES: Record<string, Partial<ComputedStyle>> = {
     },
     'b': {
         fontWeight: 'bold'
+    },
+    'em': {
+        fontStyle: 'italic'
+    },
+    'i': {
+        fontStyle: 'italic'
+    },
+    'u': {
+        textDecoration: 'underline'
     }
 };
 
@@ -151,6 +162,8 @@ function getComputedStyle(tagName: string, parentStyle?: ComputedStyle): Compute
         borderColor: null,
         lineHeight: 1.6,
         fontWeight: 'normal',
+        fontStyle: 'normal',
+        textDecoration: 'none',
         textAlign: 'left'
     };
 
@@ -163,9 +176,7 @@ function getComputedStyle(tagName: string, parentStyle?: ComputedStyle): Compute
 // ============================================================================
 
 class HTMLRenderer {
-    private charEntities: any[] = [];
-    private imageEntities: ImageEntity[] = [];
-    private rectEntities: RectEntity[] = [];
+    private entities: Entity[] = [];
     private containerWidth: number;
     private currentY: number = 0;
     private gl: WebGLRenderingContext;
@@ -181,9 +192,7 @@ class HTMLRenderer {
         const doc = parser.parseFromString(htmlString, 'text/html');
         const body = doc.body;
 
-        this.charEntities = [];
-        this.imageEntities = [];
-        this.rectEntities = [];
+        this.entities = [];
         this.currentY = 0;
 
         const bodyStyle = getComputedStyle('body');
@@ -213,12 +222,15 @@ class HTMLRenderer {
         // Draw background (measure first) - skip for body element
         if (style.backgroundColor) {
             const bgHeight = await this.measureElementHeight(element, contentWidth, style, CharEntity);
-            this.rectEntities.push(new RectEntity(
+            this.entities.push(new RectEntity(
                 x,
                 this.currentY,
                 maxWidth - style.marginLeft - style.marginRight,
                 bgHeight,
-                style.backgroundColor
+                style.backgroundColor,
+                false,
+                0,
+                -1 // background rect should be in the very back
             ));
         }
 
@@ -251,11 +263,16 @@ class HTMLRenderer {
     }
 
     private createCharEntity(char: string, x: number, y: number, style: ComputedStyle, CharEntity: any): any { // so i don't have to change every use of the constructor if i were to change it
-        const charEntity = new CharEntity();
+        const charEntity = new CharEntity(
+            char,
+            0, 0,
+            style.fontSize,
+            style.color
+        );
         charEntity.pos = Vec2.new(x, y);
-        charEntity.char = char;
-        charEntity.size = style.fontSize;
-        charEntity.color = style.color;
+        charEntity.bold = style.fontWeight === 'bold';
+        charEntity.italic = style.fontStyle === 'italic';
+        charEntity.underline = style.textDecoration === 'underline';
         return charEntity;
     }
 
@@ -308,7 +325,7 @@ class HTMLRenderer {
 
                     // Create character entity
                     const charEntity = this.createCharEntity(char, currentX, this.currentY, style, CharEntity);
-                    this.charEntities.push(charEntity);
+                    this.entities.push(charEntity);
                     hasContent = true;
 
                     // Advance X position
@@ -395,7 +412,7 @@ class HTMLRenderer {
                     }
 
                     const charEntity = this.createCharEntity(char, currentX, this.currentY, style, CharEntity);
-                    this.charEntities.push(charEntity);
+                    this.entities.push(charEntity);
                     hasContent = true;
 
                     currentX += charWidth;
@@ -432,7 +449,7 @@ class HTMLRenderer {
         if (height === 0) height = width * 0.75;
 
         const imageEntity = new ImageEntity(x, this.currentY, width, height, src);
-        this.imageEntities.push(imageEntity);
+        this.entities.push(imageEntity);
 
         // Load texture
         this.loadImageTexture(src).then(texture => {
@@ -466,11 +483,12 @@ class HTMLRenderer {
                 if (!cell) continue;
 
                 const cellStyle = getComputedStyle(cell.tagName.toLowerCase(), style);
-                const height = await this.measureCellHeight(cell, colWidth, cellStyle, CharEntity);
+                const height = await this.measureCellHeight(cell, colWidth - cellStyle.paddingLeft - cellStyle.paddingRight, cellStyle, CharEntity);
                 cellHeights.push(height);
             }
 
             const maxRowHeight = Math.max(...cellHeights, 0);
+            const rowStartY = this.currentY;
 
             for (let i = 0; i < cells.length; i++) {
                 const cell = cells[i];
@@ -479,23 +497,29 @@ class HTMLRenderer {
                 const cellX = x + (i * colWidth);
                 const cellStyle = getComputedStyle(cell.tagName.toLowerCase(), style);
 
+                // draw table background
                 if (cellStyle.backgroundColor) {
-                    this.rectEntities.push(new RectEntity(
+                    this.entities.push(new RectEntity(
                         cellX,
-                        this.currentY,
+                        rowStartY,
                         colWidth,
                         maxRowHeight,
-                        cellStyle.backgroundColor
+                        cellStyle.backgroundColor,
+                        false,
+                        0,
+                        1
                     ));
                 }
 
                 if (cellStyle.borderWidth > 0 && cellStyle.borderColor) {
-                    this.drawBorder(cellX, this.currentY, colWidth, maxRowHeight,
+                    this.drawBorder(cellX, rowStartY, colWidth, maxRowHeight,
                         cellStyle.borderWidth, cellStyle.borderColor);
                 }
 
+                // Render cell content at a fixed Y within the row, not using shared currentY
+                const cellContentY = rowStartY + cellStyle.paddingTop;
                 const savedY = this.currentY;
-                this.currentY += cellStyle.paddingTop;
+                this.currentY = cellContentY;
                 await this.renderTextContent(
                     cell,
                     cellX + cellStyle.paddingLeft,
@@ -506,7 +530,7 @@ class HTMLRenderer {
                 this.currentY = savedY;
             }
 
-            this.currentY += maxRowHeight;
+            this.currentY = rowStartY + maxRowHeight;
         }
     }
 
@@ -532,7 +556,7 @@ class HTMLRenderer {
                 const char = bullet[j];
                 if (!char) continue;
                 const charEntity = this.createCharEntity(char, bulletX, this.currentY, style, CharEntity);
-                this.charEntities.push(charEntity);
+                this.entities.push(charEntity);
                 bulletX += CharUtils.getWidth(char, style.fontSize);
             }
 
@@ -542,10 +566,10 @@ class HTMLRenderer {
     }
 
     private drawBorder(x: number, y: number, w: number, h: number, thickness: number, color: Color): void {
-        this.rectEntities.push(new RectEntity(x, y, w, thickness, color));
-        this.rectEntities.push(new RectEntity(x, y + h - thickness, w, thickness, color));
-        this.rectEntities.push(new RectEntity(x, y, thickness, h, color));
-        this.rectEntities.push(new RectEntity(x + w - thickness, y, thickness, h, color));
+        this.entities.push(new RectEntity(x, y, w, thickness, color));
+        this.entities.push(new RectEntity(x, y + h - thickness, w, thickness, color));
+        this.entities.push(new RectEntity(x, y, thickness, h, color));
+        this.entities.push(new RectEntity(x + w - thickness, y, thickness, h, color));
     }
 
     private isInlineElement(tagName: string): boolean {
@@ -560,7 +584,7 @@ class HTMLRenderer {
         CharEntity: any
     ): Promise<number> {
         const savedY = this.currentY;
-        const savedCharCount = this.charEntities.length;
+        const savedCharCount = this.entities.length;
 
         this.currentY += style.paddingTop;
         await this.renderTextContent(
@@ -574,7 +598,7 @@ class HTMLRenderer {
 
         const height = this.currentY - savedY;
         this.currentY = savedY;
-        this.charEntities.length = savedCharCount;
+        this.entities.length = savedCharCount;
 
         return height;
     }
@@ -586,13 +610,13 @@ class HTMLRenderer {
         CharEntity: any
     ): Promise<number> {
         const savedY = this.currentY;
-        const savedCharCount = this.charEntities.length;
+        const savedCharCount = this.entities.length;
 
         await this.renderTextContent(element, 0, maxWidth, style, CharEntity);
 
         const height = this.currentY - savedY + style.paddingTop + style.paddingBottom;
         this.currentY = savedY;
-        this.charEntities.length = savedCharCount;
+        this.entities.length = savedCharCount;
 
         return height;
     }
@@ -627,16 +651,8 @@ class HTMLRenderer {
         });
     }
 
-    getCharEntities() {
-        return this.charEntities;
-    }
-
-    getImageEntities() {
-        return this.imageEntities;
-    }
-
-    getRectEntities() {
-        return this.rectEntities;
+    getEntities() {
+        return this.entities;
     }
 }
 
@@ -652,30 +668,20 @@ export class ProgressiveHTMLRenderer {
         this.renderer = new HTMLRenderer(gl, containerWidth);
     }
 
-    async render(htmlString: string, CharEntity: any): Promise<{
-        charEntities: any[],
-        imageEntities: ImageEntity[],
-        rectEntities: RectEntity[]
-    }> {
+    async render(htmlString: string, CharEntity: any): Promise<Entity[]> {
         await this.renderer.parseHTML(htmlString, CharEntity);
 
-        return {
-            charEntities: this.renderer.getCharEntities(),
-            imageEntities: this.renderer.getImageEntities(),
-            rectEntities: this.renderer.getRectEntities()
-        };
+        return this.renderer.getEntities()
     }
 
     async *renderProgressive(htmlString: string, CharEntity: any) {
         await this.renderer.parseHTML(htmlString, CharEntity);
 
-        const chars = this.renderer.getCharEntities();
-        for (let i = 0; i < chars.length; i += this.batchSize) {
+        const entities = this.renderer.getEntities();
+        for (let i = 0; i < entities.length; i += this.batchSize) {
             yield {
-                charEntities: chars.slice(0, i + this.batchSize),
-                imageEntities: this.renderer.getImageEntities(),
-                rectEntities: this.renderer.getRectEntities(),
-                progress: Math.min(100, ((i + this.batchSize) / chars.length) * 100)
+                entities: entities.slice(0, i + this.batchSize),
+                progress: Math.min(100, ((i + this.batchSize) / entities.length) * 100)
             };
 
             await new Promise(resolve => setTimeout(resolve, 0));
@@ -684,3 +690,29 @@ export class ProgressiveHTMLRenderer {
 }
 
 export default ProgressiveHTMLRenderer;
+
+/**
+ * Fetches the HTML content of a Wikipedia article from the given URL.
+ * @param url The URL of the Wikipedia article to fetch from.
+ */
+export async function fetchArticle(url: string) {
+    // Extract article title from URL
+    const titleMatch = url.match(/\/wiki\/([^#?]*)/);
+    if (!titleMatch) {
+        throw new Error('Invalid Wikipedia URL');
+    }
+    const title = titleMatch[1] ?? "Taco";
+
+    // url
+    //const apiUrl = `https://en.wikipedia.org/w/rest.php/v1/page/Dog/html`;
+    const apiUrl = `https://en.wikipedia.org/api/rest_v1/page/html/Dog`;
+
+    const content: string = await fetch(apiUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Failed to fetch article: ${response.status} ${response.statusText}`);
+            }
+            return response.text();
+        });
+    return content;
+}

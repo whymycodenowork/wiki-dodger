@@ -1,0 +1,30 @@
+fix article fetching
+
+fix tables rendering
+    also reduce number of rects per table for better performance
+
+fix lag on low-end devices
+    maybe remove excessive sorting of arrays
+
+fix rendering of **bold**, *italic*, and <u>underlined</u> text
+    italic still renderes bold too when now bold and underline is drawn with the wrong texture
+
+make the html rendererer turn words into enemy groups
+
+turn the tables into minibosses and images into mob spawners (?)
+    this will be very difficult
+
+make projectiles be able to interact with the player (in progress)
+
+let player shoot projectiles to kill enemies (in progress)
+
+make rectentities and imageentities scroll up
+    should be quite easy
+
+fix scrolling to stop every few paragraphs
+    probably quite hard
+
+improve player movement
+    faster, snappier, and more responsive.
+
+give the player a mouse cursor texture (done)

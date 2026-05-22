@@ -1,18 +1,45 @@
-import type { fontData } from "graphics/SpriteBatch.js";
+import type SpriteBatch from "./graphics/SpriteBatch.js";
+import type { fontData } from "./graphics/SpriteBatch.js";
 
 export const Utils = {
+    /**
+     * converts degrees to radians.
+     * @param deg angle in degrees
+     * @returns angle in radians
+     */
     degToRad(deg: number): number {
         return deg * (Math.PI / 180);
     },
 
+    /**
+     * converts radians to degrees.
+     * @param rad angle in radians
+     * @returns angle in degrees
+     */
     radToDeg(rad: number): number {
         return rad * (180 / Math.PI);
     },
 
+    /**
+     * clamps a number between a minimum and maximum value.
+     * @param value the number to clamp
+     * @param min the minimum value
+     * @param max the maximum value
+     * @returns the clamped value
+     */
     clamp(value: number, min: number, max: number): number {
         return Math.max(min, Math.min(max, value));
     },
 
+    /**
+     * linear interpolation
+     * 
+     * this can't be too hard
+     * @param a 
+     * @param b 
+     * @param t 
+     * @returns 
+     */
     lerp(a: number, b: number, t: number): number {
         return a + (b - a) * t;
     },
@@ -47,10 +74,22 @@ export const Utils = {
         return outMin + ((value - inMin) / (inMax - inMin)) * (outMax - outMin);
     },
 
+    /**
+     * returns a random number between min (inclusive) and max (exclusive)
+     * @param min the minimum number
+     * @param max the maximum number
+     * @returns a random number between min (inclusive) and max (exclusive)
+     */
     random(min: number, max: number): number {
         return Math.random() * (max - min) + min;
     },
 
+    /**
+     * returns a random integer between min and max (inclusive)
+     * @param min the minimum integer
+     * @param max the maximum integer
+     * @returns a random integer between min and max (inclusive)
+     */
     randomInt(min: number, max: number): number {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     },
@@ -60,8 +99,6 @@ export const Utils = {
     },
 
     // ===============================  logging  ==========================================
-    // these are my go-to things to log to the console so i keep my sanity when debugging.
-    // ====================================================================================
 
     /**
      * yummers
@@ -88,28 +125,53 @@ export const Utils = {
     },
 }
 
+/**
+ * a simple 2D vector type
+ */
 export type Vec2 = { x: number; y: number };
 
+/**
+ * stuff for working with vec2s.
+ * 
+ * if you don't know what a vector is i don't think you should be trying to make a game
+ */
 export const Vec2 = {
     // --- creation ---
+    /**
+     * creates a new vec2
+     * @param x the x value
+     * @param y the y value
+     * @returns the new vec2
+     */
     new(x = 0, y = 0): Vec2 {
         return { x, y };
     },
 
+    /**
+     * clones a vec2 object
+     * @param a the vector to copy
+     * @returns the cloned vec2
+     */
     clone(a: Vec2): Vec2 {
         return { x: a.x, y: a.y };
     },
 
     // --- arithmetic ---
+    /**
+     * adds two vectors together
+     * @param a the first vector
+     * @param b the second vector
+     * @returns the result as a new vector object
+     */
     add(a: Vec2, b: Vec2): Vec2 {
         return { x: a.x + b.x, y: a.y + b.y };
     },
 
     /**
-     * adds b to a
+     * adds b to a and returns a.
      * @param a the vector to add to
      * @param b the vector to add
-     * @returns a + b
+     * @returns a after adding
      */
     addTo(a: Vec2, b: Vec2): Vec2 {
         a.x += b.x;
@@ -117,17 +179,35 @@ export const Vec2 = {
         return a;
     },
 
+    /**
+     * subtracts two vectors
+     * @param a the first vector
+     * @param b the second vector
+     * @returns the result as a new vector object
+     */
     sub(a: Vec2, b: Vec2): Vec2 {
         return { x: a.x - b.x, y: a.y - b.y };
     },
 
-    mul(a: Vec2, b: Vec2 | number): Vec2 { // multiply vectors together or by scalar
+    /**
+     * multiplies a by b
+     * @param a the vector to multiply
+     * @param b the vector or scalar to multiply by
+     * @returns the result of the multiplication as a new vector object
+     */
+    mul(a: Vec2, b: Vec2 | number): Vec2 {
         if (typeof b === 'number') {
             return { x: a.x * b, y: a.y * b };
         }
         return { x: a.x * b.x, y: a.y * b.y };
     },
 
+    /**
+     * divides a by s
+     * @param a the vector to divide
+     * @param s the scalar to divide by
+     * @returns the divided vector as a new vector object
+     */
     div(a: Vec2, s: number): Vec2 {
         return { x: a.x / s, y: a.y / s };
     },
@@ -137,6 +217,11 @@ export const Vec2 = {
         return Math.hypot(a.x, a.y);
     },
 
+    /**
+     * squared magnitude. useful for comparing distances cheaply
+     * @param a the vector to get the squared magnitude of
+     * @returns the squared magnitude
+     */
     mag2(a: Vec2): number {
         return a.x * a.x + a.y * a.y;
     },
@@ -235,6 +320,7 @@ export const Vec2 = {
  */
 export interface Position {
     pos: Vec2;
+    z: number; // z for rendering
 }
 
 /**
@@ -244,17 +330,244 @@ export interface Velocity {
     vel: Vec2;
 }
 
-export type Rect = { pos: Vec2; w: number; h: number; };
+/**
+ * for having a rotation (radians)
+ */
+export interface Rotation {
+    rotation: number;
+}
 
-export const Rect = {
-    intersects(a: Rect, b: Rect): boolean {
+export interface Transform extends Position, Rotation {}
+
+/**
+ * implement for having a collider.
+ */
+export interface Collider {
+    w: number;
+    h: number;
+    round: boolean; // whether the collider is an ellipse or rectangle
+}
+
+function rotatePoint(point: Vec2, origin: Vec2, rotation: number): Vec2 {
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    const dx = point.x - origin.x;
+    const dy = point.y - origin.y;
+    return {
+        x: origin.x + dx * cos - dy * sin,
+        y: origin.y + dx * sin + dy * cos,
+    };
+}
+
+function rotateVector(direction: Vec2, rotation: number): Vec2 {
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    return {
+        x: direction.x * cos - direction.y * sin,
+        y: direction.x * sin + direction.y * cos,
+    };
+}
+
+function getColliderCenter(collider: Position & Collider): Vec2 {
+    return {
+        x: collider.pos.x + collider.w * 0.5,
+        y: collider.pos.y + collider.h * 0.5,
+    };
+}
+
+function getRectCorners(collider: Position & Collider, rotation: number): Vec2[] {
+    const center = getColliderCenter(collider);
+    const halfW = collider.w * 0.5;
+    const halfH = collider.h * 0.5;
+    const corners = [
+        { x: center.x - halfW, y: center.y - halfH },
+        { x: center.x + halfW, y: center.y - halfH },
+        { x: center.x + halfW, y: center.y + halfH },
+        { x: center.x - halfW, y: center.y + halfH },
+    ];
+    if (rotation === 0) {
+        return corners;
+    }
+    return corners.map((point) => rotatePoint(point, center, rotation));
+}
+
+function projectPoints(points: Vec2[], axis: Vec2) {
+    const normalized = Vec2.normalized(axis);
+    const firstPoint = points[0]!;
+    let min = Vec2.dot(firstPoint, normalized);
+    let max = min;
+    for (let i = 1; i < points.length; i += 1) {
+        const projection = Vec2.dot(points[i]!, normalized);
+        if (projection < min) min = projection;
+        if (projection > max) max = projection;
+    }
+    return { min, max };
+}
+
+function axisOverlap(projA: { min: number; max: number }, projB: { min: number; max: number }) {
+    return projA.max >= projB.min && projB.max >= projA.min;
+}
+
+function rotatedRectIntersect(a: Position & Collider, b: Position & Collider, rotA: number, rotB: number): boolean {
+    if (rotA === 0 && rotB === 0) {
         return !(a.pos.x > b.pos.x + b.w ||
             a.pos.x + a.w < b.pos.x ||
             a.pos.y > b.pos.y + b.h ||
             a.pos.y + a.h < b.pos.y);
     }
+
+    const cornersA = getRectCorners(a, rotA);
+    const cornersB = getRectCorners(b, rotB);
+    const axes = [
+        Vec2.sub(cornersA[1]!, cornersA[0]!),
+        Vec2.sub(cornersA[3]!, cornersA[0]!),
+        Vec2.sub(cornersB[1]!, cornersB[0]!),
+        Vec2.sub(cornersB[3]!, cornersB[0]!),
+    ];
+
+    for (const axis of axes) {
+        const projA = projectPoints(cornersA, axis);
+        const projB = projectPoints(cornersB, axis);
+        if (!axisOverlap(projA, projB)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function pointInRotatedRect(point: Vec2, rect: Position & Collider, rotation: number): boolean {
+    const center = getColliderCenter(rect);
+    const local = rotatePoint(point, center, -rotation);
+    return (
+        Math.abs(local.x - center.x) <= rect.w * 0.5 &&
+        Math.abs(local.y - center.y) <= rect.h * 0.5
+    );
+}
+
+function pointInRotatedEllipse(point: Vec2, ellipse: Position & Collider, rotation: number): boolean {
+    const center = getColliderCenter(ellipse);
+    const local = rotatePoint(point, center, -rotation);
+    const rx = ellipse.w * 0.5;
+    const ry = ellipse.h * 0.5;
+    const dx = local.x - center.x;
+    const dy = local.y - center.y;
+    return dx * dx / (rx * rx) + dy * dy / (ry * ry) <= 1;
+}
+
+function transformPointToUnitCircle(point: Vec2, ellipse: Position & Collider, rotation: number): Vec2 {
+    const center = getColliderCenter(ellipse);
+    const local = rotatePoint(point, center, -rotation);
+    return {
+        x: (local.x - center.x) / (ellipse.w * 0.5),
+        y: (local.y - center.y) / (ellipse.h * 0.5),
+    };
+}
+
+function segmentIntersectsUnitCircle(a: Vec2, b: Vec2): boolean {
+    const ab = Vec2.sub(b, a);
+    const ab2 = Vec2.mag2(ab);
+    if (ab2 === 0) {
+        return Vec2.mag2(a) <= 1;
+    }
+
+    const t = Utils.clamp(-Vec2.dot(a, ab) / ab2, 0, 1);
+    const closest = Vec2.add(a, Vec2.mul(ab, t));
+    return Vec2.mag2(closest) <= 1;
+}
+
+function ellipseRectIntersect(ellipse: Position & Collider, rect: Position & Collider, rotEllipse: number, rotRect: number): boolean {
+    const rectCorners = getRectCorners(rect, rotRect);
+    if (rectCorners.some((corner) => pointInRotatedEllipse(corner, ellipse, rotEllipse))) {
+        return true;
+    }
+    if (pointInRotatedRect(getColliderCenter(ellipse), rect, rotRect)) {
+        return true;
+    }
+
+    const unitCorners = rectCorners.map((corner) => transformPointToUnitCircle(corner, ellipse, rotEllipse));
+    for (let i = 0; i < 4; i += 1) {
+        const a = unitCorners[i]!;
+        const b = unitCorners[(i + 1) % 4]!;
+        if (segmentIntersectsUnitCircle(a, b)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function ellipseSupportRadius(ellipse: Position & Collider, direction: Vec2, rotation: number): number {
+    const local = rotateVector(direction, -rotation);
+    const rx = ellipse.w * 0.5;
+    const ry = ellipse.h * 0.5;
+    return Math.hypot(local.x * rx, local.y * ry);
+}
+
+function ellipseEllipseIntersect(a: Position & Collider, b: Position & Collider, rotA: number, rotB: number): boolean {
+    const centerA = getColliderCenter(a);
+    const centerB = getColliderCenter(b);
+
+    if (pointInRotatedEllipse(centerA, b, rotB) || pointInRotatedEllipse(centerB, a, rotA)) {
+        return true;
+    }
+
+    const delta = Vec2.sub(centerB, centerA);
+    const distance = Vec2.mag(delta);
+    if (distance === 0) {
+        return true;
+    }
+
+    const direction = Vec2.div(delta, distance);
+    const radiusA = ellipseSupportRadius(a, direction, rotA);
+    const radiusB = ellipseSupportRadius(b, { x: -direction.x, y: -direction.y }, rotB);
+    return distance <= radiusA + radiusB;
+}
+
+/**
+ * Collider utilities.
+ * Rotated rectangles and ellipses are both supported.
+ */
+export const Collider = {
+    intersects(a: Position & Collider & Partial<Rotation>, b: Position & Collider & Partial<Rotation>): boolean {
+        const rotA = a.rotation ?? 0;
+        const rotB = b.rotation ?? 0;
+
+        if (!a.round && !b.round) {
+            return rotatedRectIntersect(a, b, rotA, rotB);
+        }
+
+        if (a.round && b.round) {
+            return ellipseEllipseIntersect(a, b, rotA, rotB);
+        }
+
+        if (a.round) {
+            return ellipseRectIntersect(a, b, rotA, rotB);
+        }
+
+        return ellipseRectIntersect(b, a, rotB, rotA);
+    },
 };
 
+/**
+ * an interface for any entity.
+ */
+export interface Entity extends Transform, Velocity, Collider {
+    /**
+     * must implement this for it to be updated every frame
+     * @param dt delta time
+     */
+    update(dt: number): void;
+    /**
+     * must implement this for it to be rendered
+     * @param batch the batch to draw with. it is usually one instance passed around everywhere
+     */
+    draw(batch: SpriteBatch): void;
+}
+
+/**
+ * type for colors. rgba values range from 0-1.
+ */
 export type Color = {
     r: number;
     g: number;
@@ -262,38 +575,70 @@ export type Color = {
     a: number;
 };
 
+/**
+ * alias for color for british people. this is not serious. 
+ * typescript type aliases are kinda useless
+ */
+export type Colour = Color;
+
 export const Color = {
     new(r = 1, g = 1, b = 1, a = 1) {
         return { r, g, b, a };
     },
 
+    /**
+     * Clones the given color object.
+     * @param c The color to clone.
+     * @returns A copy of the color object.
+     */
     clone(c: Color) {
         return { r: c.r, g: c.g, b: c.b, a: c.a };
     },
 
+    // shorthands for common colors
+
+    /**
+     * Red. RGBA: (1, 0, 0, 1)
+     */
     get red(): Color {
         return { r: 1, g: 0, b: 0, a: 1 };
     },
 
+    /**
+     * Green. RGBA: (0, 1, 0, 1)
+     */
     get green(): Color {
         return { r: 0, g: 1, b: 0, a: 1 };
     },
 
+    /**
+     * Blue. RGBA: (0, 0, 1, 1)
+     */
     get blue(): Color {
+
         return { r: 0, g: 0, b: 1, a: 1 };
     },
 
+    /**
+     * Black. RGBA: (0, 0, 0, 1)
+     */
     get black(): Color {
         return { r: 0, g: 0, b: 0, a: 1 };
     },
 
+    /**
+     * White. RGBA: (1, 1, 1, 1)
+     */
     get white(): Color {
         return { r: 1, g: 1, b: 1, a: 1 };
     },
 
+    /**
+     * Empty. RGBA: (0, 0, 0, 0)
+     */
     get empty(): Color {
         return { r: 0, g: 0, b: 0, a: 0 };
-    },
+    }
 }
 
 export function generateFontAtlas(fontSize = 32, font = "sans-serif") {

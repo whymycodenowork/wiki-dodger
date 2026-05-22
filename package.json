@@ -4,11 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "vite",
     "build": "tsc && vite build"
   },
-  "keywords": [],
+  "keywords": ["wikipedia", "roguelike", "bullet hell"],
   "author": "",
   "license": "ISC",
   "type": "module",
